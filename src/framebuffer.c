@@ -7,6 +7,7 @@
 #include <framebuffer.h>
 #include <hardware/gpio.h>
 #include <hardware/timer.h>
+#include <string.h>
 
 static void latch(framebuffer_t *framebuffer, int line);
 
@@ -31,46 +32,120 @@ int framebuffer_init(framebuffer_config_t config, framebuffer_t *framebuffer) {
     gpio_set_pulls(framebuffer->config.pin_r0, 0, 1);
     gpio_set_pulls(framebuffer->config.pin_g0, 0, 1);
     gpio_set_pulls(framebuffer->config.pin_b0, 0, 1);
+    gpio_set_pulls(framebuffer->config.pin_r1, 0, 1);
+    gpio_set_pulls(framebuffer->config.pin_g1, 0, 1);
+    gpio_set_pulls(framebuffer->config.pin_b1, 0, 1);
     gpio_set_pulls(framebuffer->config.pin_clk, 0, 1);
     gpio_set_pulls(framebuffer->config.pin_lat, 0, 1);
     gpio_set_pulls(framebuffer->config.pin_oe, 0, 1);
 
-    void *fb = malloc(config.w * config.h * (config.bpp / 8));
+    size_t buffer_size = config.w * config.h * (config.bpp / 8);
+    void *fb = malloc(buffer_size);
     if (fb == NULL) {
         return FRAMEBUFFER_ERROR;
     }
+    bzero(fb, buffer_size);
+
     framebuffer->buffer = fb;
     framebuffer->config = config;
+    framebuffer->pwm = 0;
     return FRAMEBUFFER_OK;
 }
 
 int framebuffer_sync(framebuffer_t *framebuffer) {
-    for (int line = 0; line < (framebuffer->config.h / 2); line++) {
-        // Unpack a pixel
-        uint16_t pixel = *(uint16_t *)(framebuffer->buffer+line*32);
-        int r = (pixel >> 11) & 0x1F;
-        int g = (pixel >> 5) & 0x3F;
-        int b = pixel & 0x1F;
+    uint8_t *ptr = framebuffer->buffer;
 
-        // Set the line values for the panel top half
-        gpio_put(framebuffer->config.pin_r0, r);
-        gpio_put(framebuffer->config.pin_b0, g);
-        gpio_put(framebuffer->config.pin_g0, b);
+    for (int y = 0; y < framebuffer->config.h; y++) {
+        if (y > 7) {
+            // TODO Hack for the two lines
+            continue;
+        }
 
-        // Shift the register into the shifter
-        gpio_put(framebuffer->config.pin_clk, 1);
-        busy_wait_us(10); // TODO this could use some tweaking
-        gpio_put(framebuffer->config.pin_clk, 0);
+        int y_idx = y * framebuffer->config.w * 2;
+        int y_b_idx = y_idx + (framebuffer->config.w * 2 * 8);
+        for (int x = 0; x < framebuffer->config.w; x++) {
+            int x_idx = x * 2;
+
+            // Unpack a top_pixel
+            uint16_t top_pixel = ptr[y_idx + x_idx] << 8 | ptr[y_idx + x_idx + 1];
+            int t_r = ((top_pixel >> 11) & 0x1F) << 3;
+            int t_g = ((top_pixel >> 5) & 0x3F) << 2;
+            int t_b = (top_pixel & 0x1F) << 3;
+
+            uint16_t bottom_pixel = ptr[y_b_idx + x_idx] << 8 | ptr[y_b_idx + x_idx + 1];
+            int b_r = ((bottom_pixel >> 11) & 0x1F) << 3;
+            int b_g = ((bottom_pixel >> 5) & 0x3F) << 2;
+            int b_b = (bottom_pixel & 0x1F) << 3;
+
+            if (framebuffer->pwm > (t_r / 4)) {
+                t_r = 0;
+            }
+            if (framebuffer->pwm > (t_g / 4)) {
+                t_g = 0;
+            }
+            if (framebuffer->pwm > (t_b / 4)) {
+                t_b = 0;
+            }
+            if (framebuffer->pwm > (b_r / 4)) {
+                b_r = 0;
+            }
+            if (framebuffer->pwm > (b_g / 4)) {
+                b_g = 0;
+            }
+            if (framebuffer->pwm > (b_b / 4)) {
+                b_b = 0;
+            }
+
+            // Set the y values for the panel top half
+            gpio_put(framebuffer->config.pin_r0, t_r);
+            gpio_put(framebuffer->config.pin_g0, t_g);
+            gpio_put(framebuffer->config.pin_b0, t_b);
+
+            // Set the y values for the panel bottom half
+            gpio_put(framebuffer->config.pin_r1, b_r);
+            gpio_put(framebuffer->config.pin_g1, b_g);
+            gpio_put(framebuffer->config.pin_b1, b_b);
+
+            // Shift the register into the shifter
+            gpio_put(framebuffer->config.pin_clk, 1);
+            // busy_wait_us(10); // TODO this could use some tweaking
+            gpio_put(framebuffer->config.pin_clk, 0);
+        }
+
+        // Increase pwm cycle (16 steps)
+        framebuffer->pwm++;
+        if (framebuffer->pwm > 63) {
+            framebuffer->pwm = 0;
+        }
 
         // Trigger the latch
-        latch(framebuffer, line);
+        latch(framebuffer, y);
     }
+
+    return FRAMEBUFFER_OK;
+}
+
+int framebuffer_drawpixel(framebuffer_t *framebuffer, int x, int y, uint16_t rgb565_color) {
+    if (x < 0 || x >= framebuffer->config.w) {
+        return FRAMEBUFFER_ERROR;
+    }
+
+    if (y < 0 || y >= framebuffer->config.h) {
+        return FRAMEBUFFER_ERROR;
+    }
+
+    uint8_t *ptr = framebuffer->buffer;
+    int y_idx = y * framebuffer->config.w * 2;
+    int x_idx = x * 2;
+
+    ptr[y_idx + x_idx]  = rgb565_color >> 8;
+    ptr[y_idx + x_idx + 1] = rgb565_color & 0xff;
 
     return FRAMEBUFFER_OK;
 }
 
 static void latch(framebuffer_t *framebuffer, int line) {
-    // Set output enable HIGH to turn of the display
+    // Set output enable LOW to turn off the display
     gpio_put(framebuffer->config.pin_oe, 0);
 
     // Select line to latch
@@ -80,7 +155,7 @@ static void latch(framebuffer_t *framebuffer, int line) {
 
     // Trigger the latch by pulsing LAT to HIGH
     gpio_put(framebuffer->config.pin_lat, 1);
-    busy_wait_us(50);
+    busy_wait_us(5);
     gpio_put(framebuffer->config.pin_lat, 0);
 
     // Set output enable HIGH to turn on the display

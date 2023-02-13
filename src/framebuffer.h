@@ -5,6 +5,8 @@
 #ifndef LEDPANEL_FRAMEBUFFER_H
 #define LEDPANEL_FRAMEBUFFER_H
 
+#include <stdint-gcc.h>
+
 typedef struct {
     int pin_r0, pin_g0, pin_b0;
     int pin_r1, pin_g1, pin_b1;
@@ -18,6 +20,7 @@ typedef struct {
 typedef struct {
     void *buffer;
     framebuffer_config_t config;
+    int pwm;
 } framebuffer_t;
 
 #define FRAMEBUFFER_OK 0
@@ -25,5 +28,7 @@ typedef struct {
 
 int framebuffer_init(framebuffer_config_t config, framebuffer_t *framebuffer);
 int framebuffer_sync(framebuffer_t *framebuffer);
+
+int framebuffer_drawpixel(framebuffer_t *framebuffer, int x, int y, uint16_t rgb565_color);
 
 #endif //LEDPANEL_FRAMEBUFFER_H
