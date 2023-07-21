@@ -15,6 +15,7 @@ typedef struct {
     int pin_oe;
     int pin_a, pin_b, pin_c;
     int w, h, bpp;
+    int oe_inverted;
 } framebuffer_config_t;
 
 typedef struct {
@@ -29,6 +30,6 @@ typedef struct {
 int framebuffer_init(framebuffer_config_t config, framebuffer_t *framebuffer);
 int framebuffer_sync(framebuffer_t *framebuffer);
 
-int framebuffer_drawpixel(framebuffer_t *framebuffer, int x, int y, uint16_t rgb565_color);
+int framebuffer_drawpixel(framebuffer_t *framebuffer, int x, int y, uint32_t color);
 
 #endif //LEDPANEL_FRAMEBUFFER_H

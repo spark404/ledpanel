@@ -27,4 +27,7 @@
 #define GreenYellow     0xAFE5      /* 173, 255,  47 */
 #define Pink            0xF81F
 
+#define SkyBlue         0x867D
+#define LightBlue       0xAEDC
+
 #endif //LEDPANEL_RGB565_H

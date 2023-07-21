@@ -9,7 +9,17 @@
 #include <hardware/timer.h>
 #include <string.h>
 
-static void latch(framebuffer_t *framebuffer, int line);
+static void latch(framebuffer_t *framebuffer, int line, int delay);
+
+static inline uint32_t gamma_correct_565_888(uint16_t pix) {
+    uint32_t r_gamma = pix & 0xf800u;
+    r_gamma *= r_gamma;
+    uint32_t g_gamma = pix & 0x07e0u;
+    g_gamma *= g_gamma;
+    uint32_t b_gamma = pix & 0x001fu;
+    b_gamma *= b_gamma;
+    return (b_gamma >> 2 << 16) | (g_gamma >> 14 << 8) | (r_gamma >> 24 << 0);
+}
 
 int framebuffer_init(framebuffer_config_t config, framebuffer_t *framebuffer) {
     uint pins_mask = 1 << config.pin_r0 |
@@ -52,49 +62,27 @@ int framebuffer_init(framebuffer_config_t config, framebuffer_t *framebuffer) {
     return FRAMEBUFFER_OK;
 }
 
+// http://www.batsocks.co.uk/readme/art_bcm_5.htm
 int framebuffer_sync(framebuffer_t *framebuffer) {
+    if (framebuffer->pwm > 7) {
+        framebuffer->pwm = 0;
+    }
+
     uint8_t *ptr = framebuffer->buffer;
 
-    for (int y = 0; y < framebuffer->config.h; y++) {
-        if (y > 7) {
-            // TODO Hack for the two lines
-            continue;
-        }
-
-        int y_idx = y * framebuffer->config.w * 2;
-        int y_b_idx = y_idx + (framebuffer->config.w * 2 * 8);
+    for (int y = 0; y < framebuffer->config.h / 2 ; y++) {
+        int y_idx = y * framebuffer->config.w * 4;
+        int y_b_idx = y_idx + (framebuffer->config.w * 4 * 8);
         for (int x = 0; x < framebuffer->config.w; x++) {
-            int x_idx = x * 2;
+            int x_idx = x * 4;
 
-            // Unpack a top_pixel
-            uint16_t top_pixel = ptr[y_idx + x_idx] << 8 | ptr[y_idx + x_idx + 1];
-            int t_r = ((top_pixel >> 11) & 0x1F) << 3;
-            int t_g = ((top_pixel >> 5) & 0x3F) << 2;
-            int t_b = (top_pixel & 0x1F) << 3;
+            int t_r = ptr[y_idx + x_idx + 1] >> framebuffer->pwm & 0x1;
+            int t_g = ptr[y_idx + x_idx + 2] >> framebuffer->pwm & 0x1;
+            int t_b = ptr[y_idx + x_idx + 3] >> framebuffer->pwm & 0x1;
 
-            uint16_t bottom_pixel = ptr[y_b_idx + x_idx] << 8 | ptr[y_b_idx + x_idx + 1];
-            int b_r = ((bottom_pixel >> 11) & 0x1F) << 3;
-            int b_g = ((bottom_pixel >> 5) & 0x3F) << 2;
-            int b_b = (bottom_pixel & 0x1F) << 3;
-
-            if (framebuffer->pwm > (t_r / 4)) {
-                t_r = 0;
-            }
-            if (framebuffer->pwm > (t_g / 4)) {
-                t_g = 0;
-            }
-            if (framebuffer->pwm > (t_b / 4)) {
-                t_b = 0;
-            }
-            if (framebuffer->pwm > (b_r / 4)) {
-                b_r = 0;
-            }
-            if (framebuffer->pwm > (b_g / 4)) {
-                b_g = 0;
-            }
-            if (framebuffer->pwm > (b_b / 4)) {
-                b_b = 0;
-            }
+            int b_r = ptr[y_b_idx + x_idx + 1] >> framebuffer->pwm & 0x1;
+            int b_g = ptr[y_b_idx + x_idx + 2] >> framebuffer->pwm & 0x1;
+            int b_b = ptr[y_b_idx + x_idx + 3] >> framebuffer->pwm & 0x1;
 
             // Set the y values for the panel top half
             gpio_put(framebuffer->config.pin_r0, t_r);
@@ -108,24 +96,21 @@ int framebuffer_sync(framebuffer_t *framebuffer) {
 
             // Shift the register into the shifter
             gpio_put(framebuffer->config.pin_clk, 1);
-            // busy_wait_us(10); // TODO this could use some tweaking
+            busy_wait_us(1); // TODO this could use some tweaking
             gpio_put(framebuffer->config.pin_clk, 0);
         }
 
-        // Increase pwm cycle (16 steps)
-        framebuffer->pwm++;
-        if (framebuffer->pwm > 63) {
-            framebuffer->pwm = 0;
-        }
-
         // Trigger the latch
-        latch(framebuffer, y);
+        latch(framebuffer, y, 1 << (framebuffer->pwm + 1));
     }
+
+    // Increase pwm cycle (colordepth steps)
+    framebuffer->pwm++;
 
     return FRAMEBUFFER_OK;
 }
 
-int framebuffer_drawpixel(framebuffer_t *framebuffer, int x, int y, uint16_t rgb565_color) {
+int framebuffer_drawpixel(framebuffer_t *framebuffer, int x, int y, uint32_t color) {
     if (x < 0 || x >= framebuffer->config.w) {
         return FRAMEBUFFER_ERROR;
     }
@@ -135,29 +120,34 @@ int framebuffer_drawpixel(framebuffer_t *framebuffer, int x, int y, uint16_t rgb
     }
 
     uint8_t *ptr = framebuffer->buffer;
-    int y_idx = y * framebuffer->config.w * 2;
-    int x_idx = x * 2;
+    int y_idx = y * framebuffer->config.w * 4;
+    int x_idx = x * 4;
 
-    ptr[y_idx + x_idx]  = rgb565_color >> 8;
-    ptr[y_idx + x_idx + 1] = rgb565_color & 0xff;
+    ptr[y_idx + x_idx]  = color >> 24;
+    ptr[y_idx + x_idx + 1] = color >> 16 & 0xff;
+    ptr[y_idx + x_idx + 2]  = color >> 8 & 0xff;
+    ptr[y_idx + x_idx + 3] = color & 0xff;
 
     return FRAMEBUFFER_OK;
 }
 
-static void latch(framebuffer_t *framebuffer, int line) {
-    // Set output enable LOW to turn off the display
-    gpio_put(framebuffer->config.pin_oe, 0);
+static void latch(framebuffer_t *framebuffer, int line, int delay) {
 
     // Select line to latch
     gpio_put(framebuffer->config.pin_a, line & 0x1);
     gpio_put(framebuffer->config.pin_b, (line & 0x2) >> 1);
     gpio_put(framebuffer->config.pin_c, (line & 0x4) >> 2);
 
+    // Set output enable LOW to turn off the display
+    gpio_put(framebuffer->config.pin_oe, 0);
+
     // Trigger the latch by pulsing LAT to HIGH
     gpio_put(framebuffer->config.pin_lat, 1);
-    busy_wait_us(5);
+    busy_wait_us(1);
     gpio_put(framebuffer->config.pin_lat, 0);
 
     // Set output enable HIGH to turn on the display
     gpio_put(framebuffer->config.pin_oe, 1);
+
+    busy_wait_us(delay);
 }
