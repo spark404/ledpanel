@@ -11,16 +11,6 @@
 
 static void latch(framebuffer_t *framebuffer, int line, int delay);
 
-static inline uint32_t gamma_correct_565_888(uint16_t pix) {
-    uint32_t r_gamma = pix & 0xf800u;
-    r_gamma *= r_gamma;
-    uint32_t g_gamma = pix & 0x07e0u;
-    g_gamma *= g_gamma;
-    uint32_t b_gamma = pix & 0x001fu;
-    b_gamma *= b_gamma;
-    return (b_gamma >> 2 << 16) | (g_gamma >> 14 << 8) | (r_gamma >> 24 << 0);
-}
-
 int framebuffer_init(framebuffer_config_t config, framebuffer_t *framebuffer) {
     uint pins_mask = 1 << config.pin_r0 |
             1 << config.pin_g0 |
@@ -69,6 +59,12 @@ int framebuffer_sync(framebuffer_t *framebuffer) {
     }
 
     uint8_t *ptr = framebuffer->buffer;
+    uint32_t clr_mask = 1ul << framebuffer->config.pin_r0 |
+            1ul << framebuffer->config.pin_g0 |
+            1ul << framebuffer->config.pin_b0 |
+            1ul << framebuffer->config.pin_r1 |
+            1ul << framebuffer->config.pin_g1 |
+            1ul << framebuffer->config.pin_b1;
 
     for (int y = 0; y < framebuffer->config.h / 2 ; y++) {
         int y_idx = y * framebuffer->config.w * 4;
@@ -84,19 +80,21 @@ int framebuffer_sync(framebuffer_t *framebuffer) {
             int b_g = ptr[y_b_idx + x_idx + 2] >> framebuffer->pwm & 0x1;
             int b_b = ptr[y_b_idx + x_idx + 3] >> framebuffer->pwm & 0x1;
 
-            // Set the y values for the panel top half
-            gpio_put(framebuffer->config.pin_r0, t_r);
-            gpio_put(framebuffer->config.pin_g0, t_g);
-            gpio_put(framebuffer->config.pin_b0, t_b);
+            uint32_t set_mask = t_r << framebuffer->config.pin_r0 |
+                                t_g << framebuffer->config.pin_g0 |
+                                t_b << framebuffer->config.pin_b0 |
+                                b_r << framebuffer->config.pin_r1 |
+                                b_g << framebuffer->config.pin_g1 |
+                                b_b << framebuffer->config.pin_b1;
 
-            // Set the y values for the panel bottom half
-            gpio_put(framebuffer->config.pin_r1, b_r);
-            gpio_put(framebuffer->config.pin_g1, b_g);
-            gpio_put(framebuffer->config.pin_b1, b_b);
+            gpio_clr_mask(clr_mask);
+            gpio_set_mask(set_mask);
+            asm volatile("nop \n nop");
 
             // Shift the register into the shifter
             gpio_put(framebuffer->config.pin_clk, 1);
-            busy_wait_us(1); // TODO this could use some tweaking
+            asm volatile("nop \n nop \n nop");
+
             gpio_put(framebuffer->config.pin_clk, 0);
         }
 
@@ -143,7 +141,7 @@ static void latch(framebuffer_t *framebuffer, int line, int delay) {
 
     // Trigger the latch by pulsing LAT to HIGH
     gpio_put(framebuffer->config.pin_lat, 1);
-    busy_wait_us(1);
+    asm volatile("nop \n nop \n nop");
     gpio_put(framebuffer->config.pin_lat, 0);
 
     // Set output enable HIGH to turn on the display

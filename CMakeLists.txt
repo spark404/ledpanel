@@ -12,7 +12,7 @@ add_executable(ledpanel
 
 target_include_directories(ledpanel PRIVATE src)
 
-target_link_libraries(ledpanel PRIVATE pico_stdlib pico_unique_id hardware_pio)
+target_link_libraries(ledpanel PRIVATE pico_stdlib pico_unique_id hardware_pio pico_multicore)
 
 pico_add_extra_outputs(ledpanel)
 pico_enable_stdio_uart(ledpanel 0)

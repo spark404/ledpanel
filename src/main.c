@@ -2,6 +2,7 @@
 #include <hardware/gpio.h>
 #include <pico/time.h>
 #include <pico/printf.h>
+#include "pico/multicore.h"
 #include <math.h>
 #include "framebuffer.h"
 #include "rgb565.h"
@@ -33,16 +34,12 @@ framebuffer_config_t framebuffer_config = {
     .oe_inverted = false // LOW = off
 };
 
-// Rainbow
-void rainbow_init(framebuffer_t *framebuffer);
-void bright_init(framebuffer_t *framebuffer);
-void bright_test_init(framebuffer_t *framebuffer);
-void bright_test_update(framebuffer_t *framebuffer);
-void plasma_screen(framebuffer_t *framebuffer);
+void core1_entry();
+void plasma_init(framebuffer_t *framebuffer);
+void plasma_update(framebuffer_t *framebuffer);
 
 bool timer_callback(repeating_timer_t *user_data) {
-    bright_test_update(&_fb);
-    // plasma_screen(&_fb);
+    plasma_update(&_fb);
     return true;
 }
 
@@ -53,144 +50,73 @@ int main(void) {
         return -1;
     }
 
-    // Enable the boot
+    // Enable led on boot
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
-//    rainbow_init(&_fb);
-    bright_test_init(&_fb);
+    plasma_init(&_fb);
     repeating_timer_t timer;
-    add_repeating_timer_ms(250, &timer_callback, NULL, &timer);
+    add_repeating_timer_ms(30, &timer_callback, NULL, &timer);
 
+    multicore_launch_core1(core1_entry);
+    while (1) {
+        tight_loop_contents();
+    }
+}
+
+void core1_entry() {
     while (1) {
         framebuffer_sync(&_fb);
     }
 }
 
-void rainbow_init(framebuffer_t *framebuffer) {
-    for (int i=0 ; i<32; i++) {
-        framebuffer_drawpixel(framebuffer, i, 0, White);
-        framebuffer_drawpixel(framebuffer, i, 1, Red);
-        framebuffer_drawpixel(framebuffer, i, 2, Green);
-        framebuffer_drawpixel(framebuffer, i, 3, Blue);
-        framebuffer_drawpixel(framebuffer, i, 4, White);
-        framebuffer_drawpixel(framebuffer, i, 5, Cyan);
-        framebuffer_drawpixel(framebuffer, i, 6, Magenta);
-        framebuffer_drawpixel(framebuffer, i, 7, Yellow);
-        framebuffer_drawpixel(framebuffer, i, 8, Olive);
-        framebuffer_drawpixel(framebuffer, i, 9, Purple);
-        framebuffer_drawpixel(framebuffer, i, 10, DarkCyan);
-        framebuffer_drawpixel(framebuffer, i, 11, DarkGrey);
-        framebuffer_drawpixel(framebuffer, i, 12, Navy);
-        framebuffer_drawpixel(framebuffer, i, 13, DarkGreen);
-        framebuffer_drawpixel(framebuffer, i, 14, Maroon);
-        framebuffer_drawpixel(framebuffer, i, 15, DarkGrey);
+double cos_table[256];
+uint8_t colour_map[256][3];
+uint8_t ptn_table[4];
+void plasma_init(framebuffer_t *framebuffer) {
+    for (int i = 0; i< 256; i++) {
+        cos_table[i]= (60 * (cos(i*M_PI/32))) + 4;
+    }
+
+    for (int i=0; i<64; i++) {
+        colour_map[i][0] = 255;
+        colour_map[i][1] = i * 4;
+        colour_map[i][2] = 255 - (i * 4);
+
+        colour_map[i+64][0] = 255 - (i * 4);
+        colour_map[i+64][1] = 255;
+        colour_map[i+64][2] = (i * 4);
+
+        colour_map[i+128][0] = 0;
+        colour_map[i+128][1] = 255 - (i * 4);
+        colour_map[i+128][2] = 255;
+
+        colour_map[i+192][0] = i * 4;
+        colour_map[i+192][1] = 0;
+        colour_map[i+192][2] = 255;
     }
 }
 
-void bright_init(framebuffer_t *framebuffer) {
-    for (int y = 0; y < 16; y++) {
-        for (int x = 0; x < 32; x++) {
-            uint8_t color = y * 16;
-            uint16_t rgb565 = ((color >> 3) << 11) |
-                    ((color >> 2) << 5) |
-                    (color >> 3);
-            framebuffer_drawpixel(framebuffer, x, y, rgb565);
+void plasma_update(framebuffer_t *framebuffer) {
+    uint8_t t1 = ptn_table[0];
+    uint8_t t2 = ptn_table[1];
+    for (int y = 0; y < framebuffer->config.h; y++) {
+        uint8_t t3 = ptn_table[2];
+        uint8_t t4 = ptn_table[3];
+        for (int x = 0; x < framebuffer->config.w; x++) {
+            uint32_t colour = cos_table[t1] + cos_table[t2] + cos_table[t3] + cos_table[t4];
+            uint32_t c = colour_map[colour][0]<<16|colour_map[colour][1]<<8|colour_map[colour][2];
+            framebuffer_drawpixel(framebuffer, x, y, c);
+            t3 += 5;
+            t4 += 2;
         }
+        t1 += 3;
+        t2 += 1;
     }
-}
 
-void bright_test_init(framebuffer_t *framebuffer) {
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 32; x++) {
-            uint8_t color = 8;
-            if (y > 3) {
-                color = 255;
-            }
-            uint16_t rgb565 = 0x0;
-            if (x < 8) {
-                rgb565 = ((color >> 3) << 11) | ((color >> 2) << 5) | (color >> 3);
-            }
-            else if (x < 16) {
-                rgb565 = ((color >> 3) << 11);
-            }
-            else if (x < 24) {
-                rgb565 = ((color >> 2) << 5);
-            }
-            else {
-                rgb565 = (color >> 3);
-            }
-
-            framebuffer_drawpixel(framebuffer, x, y, rgb565);
-            framebuffer_drawpixel(framebuffer, x, y+8, rgb565);
-        }
-    }
-}
-
-int y_step = 0;
-int x_step = 0;
-int c_step = 0;
-void bright_test_update(framebuffer_t *framebuffer) {
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 32; x++) {
-            uint32_t color = (y * 32) << 8;
-            int y_pos = (y + y_step) % 8;
-
-            int x_pos = (x + x_step) % 32;
-            color |= x_pos * 8;
-
-            color |= c_step << 16;
-            framebuffer_drawpixel(framebuffer, x, y_pos, color);
-            framebuffer_drawpixel(framebuffer, x, 15-y_pos, color);
-        }
-    }
-    y_step = (y_step + 1) % 8;
-    x_step = (x_step + 1) % 32;
-    c_step = (c_step + 1) % 256;
-}
-
-
-uint16_t pallette[16] = {
-    Blue,
-    Navy,
-    Navy,
-    Navy,
-
-    Navy,
-    Navy,
-    Navy,
-    Navy,
-
-    Blue,
-    Navy,
-    SkyBlue,
-    SkyBlue,
-
-    LightBlue,
-    White,
-    LightBlue,
-    SkyBlue
-};
-
-#define SIN8(X) ((sin(X) * 128.0) + 128)
-#define COS8(X) ((cos(X) * 128.0) + 128)
-#define SIN16(X) (sin(X) * 32767.0)
-#define COS16(X) (cos(X) * 32767.0)
-
-int time_counter = 0;
-void plasma_screen(framebuffer_t *framebuffer) {
-    for (int x = 0; x < 32; x++) {
-        for (int y = 0; y <  16; y++) {
-            int16_t v = 0;
-            uint8_t wibble = SIN8(x);
-            v += SIN16(x * wibble * 3 + time_counter);
-            v += COS16(y * (128 - wibble)  + time_counter);
-            v += SIN16(y * x * COS8(-time_counter)/ 8);
-
-            int palette_idx = ((v >> 8) + 127) >> 4;
-            framebuffer_drawpixel(framebuffer, x, y, pallette[palette_idx]);
-        }
-    }
-    time_counter++;
+    ptn_table[0] += 1;
+    ptn_table[1] += 2;
+    ptn_table[2] += 3;
+    ptn_table[3] += 4;
 }
