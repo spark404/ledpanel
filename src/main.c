@@ -4,8 +4,10 @@
 #include <pico/printf.h>
 #include "pico/multicore.h"
 #include <math.h>
+#include <malloc.h>
 #include "framebuffer.h"
 #include "rgb565.h"
+#include "gif_decoder.h"
 
 #define B0 7
 #define G0 8
@@ -24,6 +26,10 @@
 #define DISPLAY_H 16
 #define DISPLAY_BPP 32
 
+extern uint8_t seasons_gif_start[] asm( "_binary_seasons_gif_start" );
+extern uint8_t seasons_gif_end[]   asm( "_binary_seasons_gif_end" );
+extern size_t seasons_gif_size  asm( "_binary_seasons_gif_size" );
+
 framebuffer_t _fb;
 framebuffer_config_t framebuffer_config = {
     R0,G0, B0,
@@ -34,17 +40,32 @@ framebuffer_config_t framebuffer_config = {
     .oe_inverted = false // LOW = off
 };
 
+gif_t gif;
+
 void core1_entry();
 void plasma_init(framebuffer_t *framebuffer);
 void plasma_update(framebuffer_t *framebuffer);
 
 bool timer_callback(repeating_timer_t *user_data) {
-    plasma_update(&_fb);
+    // plasma_update(&_fb);
+    frame_t frame;
+    gif_decoder_read_image(&gif, &frame);
+
+    uint8_t *frame_ptr = frame.frame;
+    for (int y=0; y<frame.height; y++) {
+        for (int x=0; x<frame.width; y++) {
+            uint32_t c = frame_ptr[0]<<16 | frame_ptr[1]<<8 | frame_ptr[2];
+            framebuffer_drawpixel(&_fb, x+frame.offset_x, y+frame.offset_y, c);
+        }
+    }
+    free(frame.frame);
+
     return true;
 }
 
 int main(void) {
     stdio_init_all();
+    sleep_ms(2000);
 
     if (framebuffer_init(framebuffer_config, &_fb) != FRAMEBUFFER_OK) {
         return -1;
@@ -55,9 +76,11 @@ int main(void) {
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
-    plasma_init(&_fb);
+    //plasma_init(&_fb);
+    gif_decoder_init(seasons_gif_start, seasons_gif_end - seasons_gif_start, &gif);
+
     repeating_timer_t timer;
-    add_repeating_timer_ms(30, &timer_callback, NULL, &timer);
+    add_repeating_timer_ms(5000, &timer_callback, NULL, &timer);
 
     multicore_launch_core1(core1_entry);
     while (1) {
