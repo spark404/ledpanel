@@ -60,9 +60,13 @@ int main(void) {
 
     //plasma_init(&_fb);
     gif_animation_init(&_fb);
+//    while (1) {
+//        gif_animation_update(&_fb);
+//        sleep_ms(500);
+//    }
 
     repeating_timer_t timer;
-    add_repeating_timer_ms(500, &timer_callback, NULL, &timer);
+    add_repeating_timer_ms(200, &timer_callback, NULL, &timer);
 
     // multicore_launch_core1(core1_entry);
     while (1) {

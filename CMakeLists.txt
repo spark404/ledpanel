@@ -11,12 +11,13 @@ add_executable(ledpanel
         src/main.c
         src/framebuffer.c src/gif_decoder.c src/gif_lzw_decompress.c src/animations/plasma.c src/animations/gif_animation.c)
 
-add_resource( "seasons.gif" )
+add_resource( "images/seasons.gif" )
+add_resource( "images/baloons.gif" )
 
 target_include_directories(ledpanel PRIVATE src)
 
-target_link_libraries(ledpanel PRIVATE pico_stdlib pico_unique_id hardware_pio pico_multicore)
-dump_cmake_variables()
+target_link_libraries(ledpanel PRIVATE pico_stdlib pico_unique_id hardware_pio pico_multicore ${RC_DEPENDS})
+
 pico_add_extra_outputs(ledpanel)
 pico_enable_stdio_uart(ledpanel 0)
 pico_enable_stdio_usb(ledpanel 1)
