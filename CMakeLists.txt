@@ -9,7 +9,7 @@ pico_sdk_init()
 
 add_executable(ledpanel
         src/main.c
-        src/framebuffer.c src/gif_decoder.c src/gif_lzw_decompress.c)
+        src/framebuffer.c src/gif_decoder.c src/gif_lzw_decompress.c src/animations/plasma.c src/animations/gif_animation.c)
 
 add_resource( "seasons.gif" )
 

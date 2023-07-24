@@ -5,7 +5,7 @@
 #ifndef LEDPANEL_FRAMEBUFFER_H
 #define LEDPANEL_FRAMEBUFFER_H
 
-#include <stdint-gcc.h>
+#include <stdint.h>
 
 typedef struct {
     int pin_r0, pin_g0, pin_b0;

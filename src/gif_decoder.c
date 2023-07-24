@@ -9,7 +9,7 @@
 #include "gif_decoder.h"
 #include "gif_lzw_decompress.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG
 #define LOG_MSG printf
@@ -113,6 +113,12 @@ gif_error_t gif_decoder_init(uint8_t *source, size_t size, gif_t *gif) {
     return GIF_OK;
 }
 
+gif_error_t gif_decoder_parse_extention_block(gif_t *gif) {
+    return GIF_OK;
+}
+
+
+
 gif_error_t gif_decoder_read_image(gif_t *gif, frame_t *frame) {
     uint8_t *end_ptr = gif->image_start + gif->image_size;
 
@@ -163,22 +169,23 @@ gif_error_t gif_decoder_read_image(gif_t *gif, frame_t *frame) {
         return GIF_ERROR;
     }
 
-    printf("--- Frame %dx%d ---\n", frame->width, frame->height);
-    uint8_t *debug_ptr = buffer;
+    LOG_MSG("--- Frame %dx%d ---\n", frame->width, frame->height);
+    uint8_t *buffer_ptr = buffer;
     uint8_t *frame_ptr = frame->frame;
     for (int y=0; y<frame->height; y++) {
         for (int x=0; x<frame->width; x++) {
-            uint8_t pattern_key = *debug_ptr;
-            printf("%02x", pattern_key);
-            frame_ptr[0] = gif->global_ct[pattern_key];
-            frame_ptr[1] = gif->global_ct[pattern_key + gif->ct_size];
-            frame_ptr[2] = gif->global_ct[pattern_key + gif->ct_size * 2];
-            debug_ptr++;
+            uint8_t pattern_key = *buffer_ptr;
+            LOG_MSG("%02x", pattern_key);
+            uint8_t idx = pattern_key * 3;
+            frame_ptr[0] = gif->global_ct[idx];
+            frame_ptr[1] = gif->global_ct[idx + 1];
+            frame_ptr[2] = gif->global_ct[idx + 2];
+            buffer_ptr++;
             frame_ptr+=3;
         }
-        printf("\n");
+        LOG_MSG("\n");
     }
-    printf("--- End Frame ---\n");
+    LOG_MSG("--- End Frame ---\n");
 
     // Jump over the blocks we just parsed
     ptr++; // Skip keysize
@@ -219,6 +226,10 @@ gif_error_t gif_decoder_read_image(gif_t *gif, frame_t *frame) {
                     ptr++;
                 }
                 break;
+            case BLOCK_TRAILER:
+                LOG_MSG("End of the file, restart");
+                gif->frame_ptr = gif->first_frame;
+                return GIF_OK;
             default:
                 LOG_MSG("Not currently pointing to an image descriptor or a known block (0x%02x)\n", *ptr);
                 return GIF_ERROR;
