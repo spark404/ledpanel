@@ -6,6 +6,7 @@
 #define LEDPANEL_FRAMEBUFFER_H
 
 #include <stdint.h>
+#include "pico/multicore.h"
 
 typedef struct {
     int pin_r0, pin_g0, pin_b0;

@@ -1,14 +1,13 @@
 function( add_resource input )
     string( MAKE_C_IDENTIFIER ${input} input_identifier )
-    set( output "${PROJECT_BINARY_DIR}/generated/${input_identifier}${CMAKE_C_OUTPUT_EXTENSION}" )
-    target_link_libraries( ${PROJECT_NAME} PRIVATE ${output} )
-    message("${CMAKE_LINKER} --relocatable --format binary --output ${PROJECT_BINARY_DIR}/generated/${output} ${PROJECT_SOURCE_DIR}/${input}")
+    set( output "${input_identifier}.S" )
 
+    target_sources( ${PROJECT_NAME} PRIVATE ${output} )
     add_custom_command(
             OUTPUT ${output}
-            COMMAND ${CMAKE_LINKER} --relocatable --format binary --output ${PROJECT_BINARY_DIR}/generated/${output} ${PROJECT_SOURCE_DIR}/${input}
+            COMMAND util/build/bin2asm ${input_identifier} > ${PROJECT_BINARY_DIR}/${output} < ${PROJECT_SOURCE_DIR}/${input}
             DEPENDS ${input}
-            COMMENT "koffie"
+            COMMENT "util/build/bin2asm ${input_identifier}"
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
 endfunction()

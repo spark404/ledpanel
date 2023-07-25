@@ -72,6 +72,7 @@ int framebuffer_sync(framebuffer_t *framebuffer) {
         for (int x = 0; x < framebuffer->config.w; x++) {
             int x_idx = x * 4;
 
+
             int t_r = ptr[y_idx + x_idx + 1] >> framebuffer->pwm & 0x1;
             int t_g = ptr[y_idx + x_idx + 2] >> framebuffer->pwm & 0x1;
             int t_b = ptr[y_idx + x_idx + 3] >> framebuffer->pwm & 0x1;
@@ -130,7 +131,6 @@ int framebuffer_drawpixel(framebuffer_t *framebuffer, int x, int y, uint32_t col
 }
 
 static void latch(framebuffer_t *framebuffer, int line, int delay) {
-
     // Select line to latch
     gpio_put(framebuffer->config.pin_a, line & 0x1);
     gpio_put(framebuffer->config.pin_b, (line & 0x2) >> 1);

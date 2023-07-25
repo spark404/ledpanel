@@ -12,13 +12,17 @@
 
 extern uint8_t seasons_gif_start[] asm( "_binary_images_seasons_gif_start" );
 extern uint8_t seasons_gif_end[]   asm( "_binary_images_seasons_gif_end" );
-extern uint8_t baloons_gif_start[] asm( "_binary_images_baloons_gif_start" );
-extern uint8_t baloons_gif_end[]   asm( "_binary_images_baloons_gif_end" );
+extern uint8_t baloons_gif_start[] asm( "images_baloons_gif_start" );
+extern uint8_t baloons_gif_end[]   asm( "images_baloons_gif_end" );
+extern uint8_t fishandcat_gif_start[] asm( "images_fishandcat_gif_start" );
+extern uint8_t fishandcat_gif_end[]   asm( "images_fishandcat_gif_end" );
+extern uint8_t skull_gif_start[] asm( "images_skull_gif_start" );
+extern uint8_t skull_gif_end[]   asm( "images_skull_gif_end" );
 
 static gif_t gif;
 
 void gif_animation_init(framebuffer_t *framebuffer) {
-    gif_decoder_init(baloons_gif_start, baloons_gif_end - baloons_gif_start, &gif);
+    gif_decoder_init(fishandcat_gif_start, fishandcat_gif_end - fishandcat_gif_start, &gif);
 }
 
 void gif_animation_update(framebuffer_t *framebuffer) {

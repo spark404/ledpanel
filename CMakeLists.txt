@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.12)
 include(pico_sdk_import.cmake)
 include(embedded.cmake)
 
+include_directories("util")
+
 project(ledpanel)
 
 pico_sdk_init()
@@ -13,6 +15,11 @@ add_executable(ledpanel
 
 add_resource( "images/seasons.gif" )
 add_resource( "images/baloons.gif" )
+add_resource( "images/chevrons.gif" )
+add_resource( "images/fishandcat.gif" )
+add_resource( "images/skull.gif" )
+add_resource( "images/snowing.gif" )
+
 
 target_include_directories(ledpanel PRIVATE src)
 
