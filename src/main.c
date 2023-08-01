@@ -26,7 +26,7 @@
 #define DISPLAY_H 16
 #define DISPLAY_BPP 32
 
-framebuffer_t _fb;
+framebuffer_t fb;
 framebuffer_config_t framebuffer_config = {
     R0,G0, B0,
     R1, G1, B1,
@@ -40,7 +40,7 @@ static void core1_entry();
 
 bool timer_callback(repeating_timer_t *user_data) {
     // plasma_update(&_fb);
-    gif_animation_update(&_fb);
+    gif_animation_update(&fb);
 
     return true;
 }
@@ -49,7 +49,7 @@ int main(void) {
     stdio_init_all();
     sleep_ms(2000);
 
-    if (framebuffer_init(framebuffer_config, &_fb) != FRAMEBUFFER_OK) {
+    if (framebuffer_init(framebuffer_config, &fb) != FRAMEBUFFER_OK) {
         return -1;
     }
 
@@ -59,21 +59,21 @@ int main(void) {
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
     //plasma_init(&_fb);
-    gif_animation_init(&_fb);
+    gif_animation_init(&fb);
 
     repeating_timer_t timer;
     add_repeating_timer_ms(60, &timer_callback, NULL, &timer);
 
     // multicore_launch_core1(core1_entry);
     while (1) {
-        framebuffer_sync(&_fb);
+        framebuffer_sync(&fb);
         tight_loop_contents();
     }
 }
 
 static void core1_entry() {
     while (1) {
-        framebuffer_sync(&_fb);
+        framebuffer_sync(&fb);
     }
 }
 

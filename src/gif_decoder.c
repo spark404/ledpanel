@@ -17,99 +17,74 @@
 #define LOG_MSG(...)
 #endif
 
-/*
- * GIF Header
- * Magic (3 bytes)   : GIF
- * Version (3 bytes) : 89a
- * FDSZ (1 byte)
- * Background Index (1)
- * Aspect (1)
- */
+#define BYTE_ALIGNED __attribute__((packed,aligned(1)))
+
+// GIF Header
+// https://www.w3.org/Graphics/GIF/spec-gif89a.txt, section 17
+typedef struct BYTE_ALIGNED {
+    uint8_t magic[3];
+    uint8_t version[3];
+} gif_header_t;
+
+// Logical Screen Descriptor
+// https://www.w3.org/Graphics/GIF/spec-gif89a.txt, section 18
+// both the pico and the gif spec happen to be little endian, so uint16_t works here
+typedef struct BYTE_ALIGNED {
+    uint16_t width;
+    uint16_t height;
+    struct {
+        uint8_t ct_size: 3;
+        uint8_t sort_flag: 1;
+        uint8_t color_resolution: 3;
+        uint8_t global_ct: 1;
+    } packed;
+    uint8_t background_idx;
+    uint8_t pxl_aspect_ratio;
+} gif_log_scrn_descr_t;
 
 static gif_error_t gif_decoder_parse_extension_block(gif_t *gif);
 static gif_error_t find_next_image_block(gif_t *gif);
 
 gif_error_t gif_decoder_init(uint8_t *source, size_t size, gif_t *gif) {
-    uint8_t *ptr = source;
-    uint8_t *end_ptr = source + size;
+    gif_header_t *header = (gif_header_t *) source;
+    gif_log_scrn_descr_t *descriptor = (gif_log_scrn_descr_t *) (source + sizeof(gif_header_t));
 
     // Verify magic
-    if (memcmp(ptr, "GIF", 3) != 0) {
+    if (memcmp(&header->magic, "GIF", 3) != 0) {
         LOG_MSG("Invalid magic\n");
         return GIF_ERROR;
     }
 
     // Verify version
-    if (memcmp(ptr+3, "89a", 3) != 0) {
+    if (memcmp(&header->version, "89a", 3) != 0) {
         LOG_MSG("Invalid version\n");
         return GIF_ERROR;
     }
 
-    ptr+=6;
+    if (descriptor->width != 32 && descriptor->height != 16) {
+        return GIF_ERROR;
+    }
 
-    uint16_t width = *(ptr) | *(ptr+1) << 8;
-    uint16_t height = *(ptr+2) | *(ptr+3) << 8;
-    uint8_t fdsz = *(ptr+4);
-    uint8_t background_idx = *(ptr+5);
-    uint8_t aspect = *(ptr+6);
-
-    if (!(fdsz & 0x80)) {
+    if (!descriptor->packed.global_ct) {
         LOG_MSG("no global color table\n");
         return GIF_ERROR;
     }
 
-    uint8_t depth = ((fdsz >> 4) & 7) + 1;
-    uint8_t gct_sz = 1 << ((fdsz & 0x07) + 1);
-
-    LOG_MSG("Got a valid gif %dx%d, depth %d, gct_sz %d, size %d\n", width, height, depth, gct_sz, size);
-
-    gif->image_start = source;
-    gif->image_size = size;
-    gif->ct_size = gct_sz;
-    gif->global_ct = ptr + 7;
-
-    LOG_MSG("-- Global Color Table --\n");
-    uint8_t *gct_ptr = gif->global_ct;
-    for (int i=0; i<gif->ct_size; i++) {
-        LOG_MSG("% 3d: (%02x,%02x,%02x)\n", i, gct_ptr[i*3], gct_ptr[i*3+1], gct_ptr[i*3+2]);
-    }
-    LOG_MSG("----\n");
-
-    ptr += 7 + (gct_sz * 3);
-
-    gif->first_frame = ptr;
-    gif->frame_ptr = ptr;
-    return GIF_OK;
-}
-
-static gif_error_t gif_decoder_parse_extension_block(gif_t *gif) {
-    // Read the next available extension block
-    uint8_t *ptr = gif->frame_ptr;
-
-    if (*ptr != EXTBLOCK_GCE) {
+    if (descriptor->packed.color_resolution + 1 != 8) {
+        LOG_MSG("%d bits per color is not supported", descriptor->packed.color_resolution + 1);
         return GIF_ERROR;
     }
 
-    ptr += 2; // skip block id and fixed size 4
-    uint8_t fields = *ptr++;
-    uint16_t delay_time = *ptr | *(ptr+1) << 8;
-    ptr += 2;
-    uint8_t transparent_idx = *ptr++;
-    ptr++; // skip block terminator
-
-    gif->transparancy_enabled = fields & 0x01;
-    if (gif->transparancy_enabled) {
-        LOG_MSG("Transparency enabled, index %d\n", transparent_idx);
-        gif->transparancy_index = transparent_idx;
-    }
-
-    gif->frame_ptr = ptr;
+    gif->image_start = source;
+    gif->image_size = size;
+    gif->ct_size = 1 << (descriptor->packed.ct_size + 1);
+    gif->global_ct = gif->image_start + sizeof(gif_header_t) + sizeof(gif_log_scrn_descr_t);
+    gif->frame_ptr = gif->global_ct + (gif->ct_size * 3);
+    gif->first_frame = gif->frame_ptr;
     return GIF_OK;
 }
 
-
-
-gif_error_t gif_decoder_read_image(gif_t *gif, frame_t *frame) {
+gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame) {
     LOG_MSG("--- Start frame decoder ---\n");
 
     // Find next available frame
@@ -272,3 +247,27 @@ static gif_error_t find_next_image_block(gif_t *gif) {
     return GIF_OK;
 }
 
+static gif_error_t gif_decoder_parse_extension_block(gif_t *gif) {
+    // Read the next available extension block
+    uint8_t *ptr = gif->frame_ptr;
+
+    if (*ptr != EXTBLOCK_GCE) {
+        return GIF_ERROR;
+    }
+
+    ptr += 2; // skip block id and fixed size 4
+    uint8_t fields = *ptr++;
+    uint16_t delay_time = *ptr | *(ptr+1) << 8;
+    ptr += 2;
+    uint8_t transparent_idx = *ptr++;
+    ptr++; // skip block terminator
+
+    gif->transparancy_enabled = fields & 0x01;
+    if (gif->transparancy_enabled) {
+        LOG_MSG("Transparency enabled, index %d\n", transparent_idx);
+        gif->transparancy_index = transparent_idx;
+    }
+
+    gif->frame_ptr = ptr;
+    return GIF_OK;
+}

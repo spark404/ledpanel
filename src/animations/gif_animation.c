@@ -27,7 +27,7 @@ void gif_animation_init(framebuffer_t *framebuffer) {
 
 void gif_animation_update(framebuffer_t *framebuffer) {
     frame_t frame;
-    if (gif_decoder_read_image(&gif, &frame) != GIF_OK) {
+    if (gif_decoder_read_next_frame(&gif, &frame) != GIF_OK) {
         printf("Error in decoder\n");
         return;
     }

@@ -36,6 +36,6 @@ typedef struct {
 } frame_t;
 
 gif_error_t gif_decoder_init(uint8_t *source, size_t size, gif_t *gif);
-gif_error_t gif_decoder_read_image(gif_t *gif, frame_t *frame);
+gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame);
 
 #endif //LEDPANEL_GIF_DECODER_H
