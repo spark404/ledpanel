@@ -49,29 +49,32 @@ int main(void) {
     stdio_init_all();
     sleep_ms(2000);
 
-    if (framebuffer_init(framebuffer_config, &fb) != FRAMEBUFFER_OK) {
-        return -1;
-    }
-
     // Enable led on boot
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
+    // Start all the framebuffer work on the second core
+    //multicore_launch_core1(core1_entry);
+
     //plasma_init(&_fb);
     gif_animation_init(&fb);
 
     repeating_timer_t timer;
-    add_repeating_timer_ms(60, &timer_callback, NULL, &timer);
+    alarm_pool_t *alarm_pool = alarm_pool_create_with_unused_hardware_alarm(1);
+    alarm_pool_add_repeating_timer_us(alarm_pool, 60 * (int64_t)1000, timer_callback, NULL, &timer);
 
-    // multicore_launch_core1(core1_entry);
+    core1_entry();
     while (1) {
-        framebuffer_sync(&fb);
         tight_loop_contents();
     }
 }
 
 static void core1_entry() {
+    if (framebuffer_init(framebuffer_config, &fb) != FRAMEBUFFER_OK) {
+        return;
+    }
+
     while (1) {
         framebuffer_sync(&fb);
     }

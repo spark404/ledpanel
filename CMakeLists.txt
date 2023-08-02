@@ -13,11 +13,15 @@ add_executable(ledpanel
         src/main.c
         src/framebuffer.c src/gif_decoder.c src/gif_lzw_decompress.c src/animations/plasma.c src/animations/gif_animation.c)
 
-add_resource( "images/seasons.gif" )
 add_resource( "images/baloons.gif" )
 add_resource( "images/chevrons.gif" )
 add_resource( "images/fishandcat.gif" )
+add_resource( "images/lattice.gif" )
+add_resource( "images/numbers.gif" )
+add_resource( "images/pattern.gif" )
+add_resource( "images/seasons.gif" )
 add_resource( "images/skull.gif" )
+add_resource( "images/snafu.gif" )
 add_resource( "images/snowing.gif" )
 
 
@@ -26,5 +30,5 @@ target_include_directories(ledpanel PRIVATE src)
 target_link_libraries(ledpanel PRIVATE pico_stdlib pico_unique_id hardware_pio pico_multicore ${RC_DEPENDS})
 
 pico_add_extra_outputs(ledpanel)
-pico_enable_stdio_uart(ledpanel 0)
-pico_enable_stdio_usb(ledpanel 1)
+pico_enable_stdio_uart(ledpanel 1)
+pico_enable_stdio_usb(ledpanel 0)

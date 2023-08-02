@@ -6,7 +6,6 @@
 #include <malloc.h>
 #include <framebuffer.h>
 #include <hardware/gpio.h>
-#include <hardware/timer.h>
 #include <string.h>
 
 static void latch(framebuffer_t *framebuffer, int line, int delay);

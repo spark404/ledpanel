@@ -85,8 +85,6 @@ gif_error_t gif_decoder_init(uint8_t *source, size_t size, gif_t *gif) {
 }
 
 gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame) {
-    LOG_MSG("--- Start frame decoder ---\n");
-
     // Find next available frame
     if (find_next_image_block(gif) != GIF_OK) {
         return GIF_ERROR;
