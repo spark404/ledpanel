@@ -86,8 +86,9 @@ gif_error_t gif_decoder_init(uint8_t *source, size_t size, gif_t *gif) {
 
 gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame) {
     // Find next available frame
-    if (find_next_image_block(gif) != GIF_OK) {
-        return GIF_ERROR;
+    gif_error_t res = find_next_image_block(gif);
+    if (res != GIF_OK) {
+        return res;
     }
 
     uint8_t *ptr = gif->frame_ptr;
@@ -139,13 +140,14 @@ gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame) {
 
     frame->transparancy_enabled = gif->transparancy_enabled;
     if (frame->transparancy_enabled) {
+        frame->transparancy_index = gif->transparancy_index;
         LOG_MSG("Transparency enabled, index is %d\n", gif->transparancy_index);
     }
 
-    gif_error_t res = gif_decoder_read_image_data(++ptr, frame->frame);
+    res = gif_decoder_read_image_data(++ptr, frame->frame);
     if (res != GIF_OK) {
         LOG_MSG("Read image failed\n");
-        return GIF_ERROR;
+        return res;
     }
 
     LOG_MSG("--- Frame %dx%d ---\n", frame->width, frame->height);
@@ -226,8 +228,7 @@ static gif_error_t find_next_image_block(gif_t *gif) {
                 break;
             case BLOCK_TRAILER:
                 // End of file
-                ptr = gif->first_frame;
-                continue;
+                return GIF_EOF;
             case BLOCK_IMAGE_DESCRIPTOR:
                 // All good
                 break;

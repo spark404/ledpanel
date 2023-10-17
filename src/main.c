@@ -100,7 +100,59 @@ static void core1_entry() {
     }
 }
 
-int transfer_in_progress = false;
+#define I2C_RECEIVE 1
+#define I2C_TRANSMIT 2
+#define I2C_FINISH 4
+
+static uint8_t i2c_receiving = 0;
+static uint8_t command[2];
+static uint8_t command_idx;
+static void handler(uint8_t state) {
+    if (state == I2C_RECEIVE) {
+        uint8_t byte = i2c_read_byte_raw(i2c1);
+        if (!i2c_receiving) {
+            i2c_receiving = 1;
+            command_idx = 0;
+            if (byte != 0x42) {
+                // Only register we have, how to send nack
+            }
+            return;
+        }
+
+        command[command_idx++] = byte;
+    }
+
+    if (state == I2C_TRANSMIT) {
+        i2c_write_byte_raw(i2c1, 0x42);
+    }
+
+    if (state == I2C_FINISH) {
+        if (i2c_receiving) {
+            i2c_receiving = 0;
+            if (command[0] > 7 || command[1] > 4) {
+                // Safety
+                gif_animation_play(1, 4);
+                return;
+            }
+
+            if (command[0] != gif_animation_get_sequence()) {
+                gif_animation_play(command[0], command[1] == 4);
+            }
+            switch (command[1]) {
+                case 0:
+                    gif_animation_stop();
+                    break;
+                case 1:
+                    gif_animation_pause();
+                    break;
+                case 2:
+                    gif_animation_resume();
+            }
+        }
+    }
+}
+
+static int transfer_in_progress = false;
 static void __not_in_flash_func(i2c1_slave_irq_handler)() {
     i2c_hw_t *hw = i2c_get_hw(i2c1);
 
@@ -112,28 +164,30 @@ static void __not_in_flash_func(i2c1_slave_irq_handler)() {
         hw->clr_tx_abrt;
         if (transfer_in_progress) {
             transfer_in_progress = false;
+            handler(I2C_FINISH);
         }
     }
     if (intr_stat & I2C_IC_INTR_STAT_R_START_DET_BITS) {
         hw->clr_start_det;
         if (transfer_in_progress) {
             transfer_in_progress = false;
+            handler(I2C_FINISH);
         }
     }
     if (intr_stat & I2C_IC_INTR_STAT_R_STOP_DET_BITS) {
         hw->clr_stop_det;
         if (transfer_in_progress) {
             transfer_in_progress = false;
+            handler(I2C_FINISH);
         }
     }
     if (intr_stat & I2C_IC_INTR_STAT_R_RX_FULL_BITS) {
         transfer_in_progress = true;
-        printf("I2C Received: %02x\n", i2c_read_byte_raw(i2c1));
+        handler(I2C_RECEIVE);
     }
     if (intr_stat & I2C_IC_INTR_STAT_R_RD_REQ_BITS) {
         hw->clr_rd_req;
         transfer_in_progress = true;
-        i2c_write_byte_raw(i2c1, 0x42);
-        printf("I2C Sent: %02x\n", 0x42);
+        handler(I2C_TRANSMIT);
     }
 }
