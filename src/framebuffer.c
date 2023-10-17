@@ -45,9 +45,16 @@ int framebuffer_init(framebuffer_config_t config, framebuffer_t *framebuffer) {
     }
     bzero(fb, buffer_size);
 
+    framebuffer->buffer_size = buffer_size;
     framebuffer->buffer = fb;
     framebuffer->config = config;
     framebuffer->pwm = 0;
+    return FRAMEBUFFER_OK;
+}
+
+int framebuffer_clear(framebuffer_t *framebuffer) {
+    bzero(framebuffer->buffer, framebuffer->buffer_size);
+
     return FRAMEBUFFER_OK;
 }
 

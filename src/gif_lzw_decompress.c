@@ -28,6 +28,7 @@ typedef struct {
     uint16_t table_size;
     entry_t table[4096];
     uint8_t *frame;
+    uint8_t bytes_remaining_in_block;
 } reader_state_t;
 
 static void init_table(reader_state_t *reader_state, uint16_t key_size);
@@ -47,13 +48,13 @@ gif_lzw_error_t gif_decoder_read_image_data(uint8_t *data, uint8_t *buffer) {
 
     // <CC> or the clear code, is (2**N),
     // <EOI>, or end-of-information, is (2**N + 1)
-    uint8_t clear_code = 1 << root_size;
-    uint8_t stop_code = clear_code + 1;
+    uint16_t clear_code = 1 << root_size;
+    uint16_t stop_code = clear_code + 1;
 
     uint8_t block_size = *ptr;
 
     LOG_MSG("LZW variable code root size %d\n", root_size);
-    LOG_MSG("First block %d\n", block_size);
+    LOG_MSG("Current block size %d\n", block_size);
 
     // Read bit by bit, from right to left
     // the first code to read is root_size + 1
@@ -63,7 +64,8 @@ gif_lzw_error_t gif_decoder_read_image_data(uint8_t *data, uint8_t *buffer) {
     reader_state_t reader_state = {
             .code_size = root_size + 1,
             .bits_remaining = 0,
-            .data_ptr = ptr + 1
+            .data_ptr = ptr + 1,
+            .bytes_remaining_in_block = block_size,
     };
     init_table(&reader_state, root_size);
 
@@ -195,14 +197,28 @@ static void add_table_entry(reader_state_t *reader_state, uint16_t length, uint1
     reader_state->table_size++;
 }
 
+static uint8_t get_next_byte(reader_state_t *reader_state) {
+    uint8_t *ptr = reader_state->data_ptr;
+    if (reader_state->bytes_remaining_in_block == 0) {
+        LOG_MSG("Skipping to next block with size %d", *ptr);
+        reader_state->bytes_remaining_in_block = *ptr;
+        ptr++;
+    }
+
+    uint8_t next = *ptr;
+    reader_state->bytes_remaining_in_block -= 1;
+    reader_state->data_ptr = ptr + 1;
+
+    return next;
+}
+
 static uint16_t read_bits(reader_state_t *reader_state) {
     uint8_t *ptr = reader_state->data_ptr;
-    // TODO check for block end
+    uint8_t next_byte;
 
     if (reader_state->bits_remaining == 0) {
-        reader_state->current = *ptr | *(ptr + 1) << 8;
+        reader_state->current = get_next_byte(reader_state) | get_next_byte(reader_state) << 8;
         reader_state->bits_remaining += 16;
-        reader_state->data_ptr = ptr+2;
     }
 
     if (reader_state->bits_remaining <= 8) {
@@ -210,9 +226,8 @@ static uint16_t read_bits(reader_state_t *reader_state) {
         // by moving the data pointer forward by one position
         // and filling up with a new byte
         reader_state->current >>= 8;
-        reader_state->current |= *ptr << 8;
+        reader_state->current |= get_next_byte(reader_state) << 8;
         reader_state->bits_remaining += 8;
-        reader_state->data_ptr = ptr+1;
     }
 
     if (reader_state->bits_remaining < reader_state->code_size) {
@@ -220,7 +235,9 @@ static uint16_t read_bits(reader_state_t *reader_state) {
         return 0;
     }
 
-    LOG_MSG("Current 0x%04x, keysize %d, bitremaining %d\n", reader_state->current, reader_state->code_size, reader_state->bits_remaining);
+    LOG_MSG("Current 0x%04x, keysize %d, bitremaining %d, bytes remaining %d\n",
+            reader_state->current, reader_state->code_size,
+            reader_state->bits_remaining, reader_state->bytes_remaining_in_block);
     uint16_t value = reader_state->current;
     value >>= (16 - reader_state->bits_remaining);
     value &= (1 << reader_state->code_size) - 1;

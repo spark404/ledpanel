@@ -102,7 +102,7 @@ gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame) {
     uint16_t height = *(ptr+6) | *(ptr+7) << 8;
     ptr += 8;
 
-    LOG_MSG("New frame with size %dx%d at %d,%d\n", width, height, x_offset, y_offset);
+    LOG_MSG("New frame with size %dx%d at %d,%d (position %ld)\n", width, height, x_offset, y_offset, ptr - gif->image_start);
     uint8_t fisrz = *(ptr);
 
     if (fisrz & 0x40) {
@@ -122,52 +122,53 @@ gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame) {
     frame->offset_y = y_offset;
     frame->width = width;
     frame->height = height;
-    frame->frame = malloc(width * height * 3); // Allocate space for all pixels in RGB888 format
-
-    frame->transparancy_enabled = gif->transparancy_enabled;
-    if (frame->transparancy_enabled) {
-        uint16_t idx = gif->transparancy_index * 3;
-        frame->transparent_colour = gif->global_ct[idx] << 16 |
-                gif->global_ct[idx + 1] << 8 |
-                gif->global_ct[idx + 2];
-        LOG_MSG("Transparency colour set to %02x,%02x,%02x for index %d\n",
-                gif->global_ct[idx], gif->global_ct[idx + 1], gif->global_ct[idx + 2], gif->transparancy_index);
-    }
+    frame->color_table = malloc(gif->ct_size * 3);
+    frame->frame = malloc(width * height);
 
     if (frame->frame == NULL) {
         LOG_MSG("Not enough free memory for the frame\n");
         return GIF_ERROR;
     }
-    uint8_t buffer[32*16]; // FIXME Good enough for now
-    gif_error_t res = gif_decoder_read_image_data(++ptr, buffer);
+
+    if (frame->color_table == NULL) {
+        LOG_MSG("Not enough free memory for the color_table\n");
+        return GIF_ERROR;
+    }
+
+    memcpy(frame->color_table, gif->global_ct, gif->ct_size * 3);
+
+    frame->transparancy_enabled = gif->transparancy_enabled;
+    if (frame->transparancy_enabled) {
+        LOG_MSG("Transparency enabled, index is %d\n", gif->transparancy_index);
+    }
+
+    gif_error_t res = gif_decoder_read_image_data(++ptr, frame->frame);
     if (res != GIF_OK) {
         LOG_MSG("Read image failed\n");
         return GIF_ERROR;
     }
 
-    //LOG_MSG("--- Frame %dx%d ---\n", frame->width, frame->height);
-    uint8_t *buffer_ptr = buffer;
+    LOG_MSG("--- Frame %dx%d ---\n", frame->width, frame->height);
     uint8_t *frame_ptr = frame->frame;
     for (int y=0; y<frame->height; y++) {
         for (int x=0; x<frame->width; x++) {
-            uint8_t pattern_key = *buffer_ptr;
-            //LOG_MSG("%02x", pattern_key);
-            uint8_t idx = pattern_key * 3;
-            frame_ptr[0] = gif->global_ct[idx];
-            frame_ptr[1] = gif->global_ct[idx + 1];
-            frame_ptr[2] = gif->global_ct[idx + 2];
-            buffer_ptr++;
-            frame_ptr+=3;
+            uint8_t pattern_key = *frame_ptr;
+            if (pattern_key == gif->transparancy_index && gif->transparancy_enabled) {
+                LOG_MSG("  ");
+            } else {
+                LOG_MSG("%02x", pattern_key);
+            }
+            frame_ptr++;
         }
-        //LOG_MSG("\n");
+        LOG_MSG("\n");
     }
-    //LOG_MSG("--- End Frame ---\n");
+    LOG_MSG("--- End Frame ---\n");
 
     // Jump over the blocks we just parsed
-    ptr++; // Skip keysize
+    ptr++; // Skip root key size
     while (*ptr != 0) {  // TODO Danger bounds check
         uint8_t block_size = *ptr++;
-        LOG_MSG("Skipping image block of size %d\n", block_size);
+        LOG_MSG("Processed data sub block of size %d\n", block_size);
         ptr += block_size;
     }
     ptr++;

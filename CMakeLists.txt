@@ -23,11 +23,12 @@ add_resource( "images/seasons.gif" )
 add_resource( "images/skull.gif" )
 add_resource( "images/snafu.gif" )
 add_resource( "images/snowing.gif" )
+add_resource( "images/pnp3000.gif" )
 
 
 target_include_directories(ledpanel PRIVATE src)
 
-target_link_libraries(ledpanel PRIVATE pico_stdlib pico_unique_id hardware_pio pico_multicore ${RC_DEPENDS})
+target_link_libraries(ledpanel PRIVATE pico_stdlib pico_unique_id hardware_pio pico_multicore hardware_i2c ${RC_DEPENDS})
 
 pico_add_extra_outputs(ledpanel)
 pico_enable_stdio_uart(ledpanel 1)
