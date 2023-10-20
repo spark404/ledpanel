@@ -90,6 +90,8 @@ void gif_animation_pause() {
 }
 
 void gif_animation_resume() {
+    if (state != PAUSED)
+        return;
     printf("Animation Resume, to %d\n", pause_state);
     mutex_enter_blocking(&gif_mutex);
     state = pause_state;

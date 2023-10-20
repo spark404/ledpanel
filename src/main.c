@@ -4,6 +4,7 @@
 #include <pico/time.h>
 #include <math.h>
 #include <hardware/i2c.h>
+#include <pico/stdio_uart.h>
 #include "framebuffer.h"
 #include "animations/animations.h"
 
@@ -47,8 +48,7 @@ bool timer_callback(repeating_timer_t *user_data) {
 }
 
 int main(void) {
-    stdio_init_all();
-    sleep_ms(2000);
+    stdio_uart_init();
     printf("PicoPlayer Starting\n");
 
     // Enable led on boot
