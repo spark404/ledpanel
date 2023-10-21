@@ -7,6 +7,7 @@
 #include <pico/stdio_uart.h>
 #include "framebuffer.h"
 #include "animations/animations.h"
+#include "i2c_slave.h"
 
 #define B0 7
 #define G0 8
@@ -25,6 +26,7 @@
 #define DISPLAY_H 16
 #define DISPLAY_BPP 32
 
+#define I2C_BAUDRATE 100000
 #define I2C_ADDRESS 0x50
 #define I2C_1_SCL 15
 #define I2C_1_SDA 14
@@ -40,7 +42,10 @@ framebuffer_config_t framebuffer_config = {
 };
 
 static void core1_entry();
-static void i2c1_slave_irq_handler();
+static void i2c_slave_handler(i2c_inst_t *i2c, i2c_slave_event_t event);
+
+static uint64_t last_i2c_transmission;
+static uint8_t i2c_timeout;
 
 bool timer_callback(repeating_timer_t *user_data) {
     gif_animation_update(&fb);
@@ -56,23 +61,6 @@ int main(void) {
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
-    // Enabled I2C
-    i2c_init(i2c1, 100 * 1000);
-
-    gpio_init(I2C_1_SCL);
-    gpio_set_function(I2C_1_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_1_SCL);
-
-    gpio_init(I2C_1_SDA);
-    gpio_set_function(I2C_1_SDA, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_1_SDA);
-
-    i2c_set_slave_mode(i2c1, true, I2C_ADDRESS);
-
-    i2c_hw_t *hw = i2c_get_hw(i2c1);
-    hw->intr_mask = I2C_IC_INTR_MASK_M_RX_FULL_BITS | I2C_IC_INTR_MASK_M_RD_REQ_BITS | I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS | I2C_IC_INTR_MASK_M_STOP_DET_BITS | I2C_IC_INTR_MASK_M_START_DET_BITS;
-    irq_set_exclusive_handler(I2C1_IRQ, i2c1_slave_irq_handler);
-    irq_set_enabled(I2C1_IRQ, true);
 
     // Start all the framebuffer work on the second core
     //multicore_launch_core1(core1_entry);
@@ -83,10 +71,32 @@ int main(void) {
     alarm_pool_t *alarm_pool = alarm_pool_create_with_unused_hardware_alarm(1);
     alarm_pool_add_repeating_timer_us(alarm_pool, 60 * (int64_t)1000, timer_callback, NULL, &timer);
 
+    i2c_init(i2c1, I2C_BAUDRATE);
+    gpio_init(I2C_1_SCL);
+    gpio_set_function(I2C_1_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C_1_SCL);
+    gpio_init(I2C_1_SDA);
+    gpio_set_function(I2C_1_SDA, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C_1_SDA);
+    i2c_slave_init(i2c1, I2C_ADDRESS, &i2c_slave_handler);
+    last_i2c_transmission = time_us_64(); // Initialize the timeout measurement
+
     // Core issues with timers, run on main core for now
-    core1_entry();
+    if (framebuffer_init(framebuffer_config, &fb) != FRAMEBUFFER_OK) {
+        panic("Framebuffer issue");
+    }
+
     while (1) {
-        tight_loop_contents();
+        if (time_us_64() - last_i2c_transmission > 10 * 1000 * 1000) {
+            if (!i2c_timeout) {
+                i2c_timeout = 1;
+                gif_animation_play(0, 3);
+            }
+        }
+        else {
+            i2c_timeout = 0;
+        }
+        framebuffer_sync(&fb);
     }
 }
 
@@ -100,45 +110,33 @@ static void core1_entry() {
     }
 }
 
-#define I2C_RECEIVE 1
-#define I2C_TRANSMIT 2
-#define I2C_FINISH 4
+static uint8_t i2c_bytes_received = 0;
+static uint8_t i2c_bytes_sent = 0;
+static uint8_t i2c_register;
+static uint8_t buffer[64];
+static void i2c_slave_handler(i2c_inst_t *i2c, i2c_slave_event_t event) {
+    uint8_t byte;
+    last_i2c_transmission = time_us_64();
 
-static uint8_t i2c_receiving = 0;
-static uint8_t command[2];
-static uint8_t command_idx;
-static void handler(uint8_t state) {
-    if (state == I2C_RECEIVE) {
-        uint8_t byte = i2c_read_byte_raw(i2c1);
-        if (!i2c_receiving) {
-            i2c_receiving = 1;
-            command_idx = 0;
-            if (byte != 0x42) {
-                // Only register we have, how to send nack
-            }
-            return;
+    switch(event) {
+    case I2C_SLAVE_RECEIVE:
+        buffer[i2c_bytes_received] = i2c_read_byte_raw(i2c);
+        if (i2c_bytes_received == 0) {
+            // First byte after START or RESTART is the register id
+            i2c_register = buffer[0];
         }
 
-        command[command_idx++] = byte;
-    }
-
-    if (state == I2C_TRANSMIT) {
-        i2c_write_byte_raw(i2c1, 0x42);
-    }
-
-    if (state == I2C_FINISH) {
-        if (i2c_receiving) {
-            i2c_receiving = 0;
-            if (command[0] > 7 || command[1] > 4) {
+        if (i2c_bytes_received == 2) {
+            if (buffer[1] > 7 || buffer[2] > 3) {
                 // Safety
-                gif_animation_play(1, 4);
+                gif_animation_play(1, 3);
                 return;
             }
 
-            if (command[0] != gif_animation_get_sequence()) {
-                gif_animation_play(command[0], command[1] == 4);
+            if (buffer[1] != gif_animation_get_sequence()) {
+                gif_animation_play(buffer[1], buffer[2]);
             }
-            switch (command[1]) {
+            switch (buffer[2]) {
                 case 0:
                     gif_animation_stop();
                     break;
@@ -149,45 +147,33 @@ static void handler(uint8_t state) {
                     gif_animation_resume();
             }
         }
+
+        i2c_bytes_received++;
+
+        break;
+    case I2C_SLAVE_REQUEST:
+        if (i2c_register != 0x42) {
+            i2c_write_byte_raw(i2c, 0x0);
+            return;
+        }
+
+        if (i2c_bytes_sent == 0) { // Sequence is the first byte
+            i2c_write_byte_raw(i2c, gif_animation_get_sequence());
+            i2c_bytes_sent++;
+        }
+        else if (i2c_bytes_sent == 1) { // State is the second byte
+            i2c_write_byte_raw(i2c, gif_animation_get_state());
+            i2c_bytes_sent++;
+        } else {
+            i2c_write_byte_raw(i2c, 0x0);
+        }
+        break;
+    case I2C_SLAVE_FINISH:
+        i2c_bytes_sent = 0;
+        i2c_bytes_received = 0;
+        break;
+    default:
+        break;
     }
 }
 
-static int transfer_in_progress = false;
-static void __not_in_flash_func(i2c1_slave_irq_handler)() {
-    i2c_hw_t *hw = i2c_get_hw(i2c1);
-
-    uint32_t intr_stat = hw->intr_stat;
-    if (intr_stat == 0) {
-        return;
-    }
-    if (intr_stat & I2C_IC_INTR_STAT_R_TX_ABRT_BITS) {
-        hw->clr_tx_abrt;
-        if (transfer_in_progress) {
-            transfer_in_progress = false;
-            handler(I2C_FINISH);
-        }
-    }
-    if (intr_stat & I2C_IC_INTR_STAT_R_START_DET_BITS) {
-        hw->clr_start_det;
-        if (transfer_in_progress) {
-            transfer_in_progress = false;
-            handler(I2C_FINISH);
-        }
-    }
-    if (intr_stat & I2C_IC_INTR_STAT_R_STOP_DET_BITS) {
-        hw->clr_stop_det;
-        if (transfer_in_progress) {
-            transfer_in_progress = false;
-            handler(I2C_FINISH);
-        }
-    }
-    if (intr_stat & I2C_IC_INTR_STAT_R_RX_FULL_BITS) {
-        transfer_in_progress = true;
-        handler(I2C_RECEIVE);
-    }
-    if (intr_stat & I2C_IC_INTR_STAT_R_RD_REQ_BITS) {
-        hw->clr_rd_req;
-        transfer_in_progress = true;
-        handler(I2C_TRANSMIT);
-    }
-}

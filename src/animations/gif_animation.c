@@ -72,12 +72,12 @@ void gif_animation_init(framebuffer_t *framebuffer) {
     state = PLAYING_LOOP;
 }
 
-void gif_animation_play(int sequence_id, int loop) {
-    printf("Animation Play (%d, %d)\n", sequence_id, loop);
+void gif_animation_play(int sequence_id, int new_state) {
+    printf("Animation Play Sequence %d, State %d\n", sequence_id, new_state);
     mutex_enter_blocking(&gif_mutex);
     current_sequence = sequence_id;
     gif_decoder_init(sequences[current_sequence].start, sequences[current_sequence].end - sequences[current_sequence].start, &gif);
-    state = loop ? PLAYING_LOOP : PLAYING;
+    state = new_state;
     mutex_exit(&gif_mutex);
 }
 

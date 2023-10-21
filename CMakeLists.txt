@@ -11,7 +11,13 @@ pico_sdk_init()
 
 add_executable(ledpanel
         src/main.c
-        src/framebuffer.c src/gif_decoder.c src/gif_lzw_decompress.c src/animations/plasma.c src/animations/gif_animation.c)
+        src/framebuffer.c
+        src/gif_decoder.c
+        src/gif_lzw_decompress.c
+        src/animations/plasma.c
+        src/animations/gif_animation.c
+        src/i2c_slave.c
+)
 
 add_resource( "images/baloons.gif" )
 add_resource( "images/chevrons.gif" )
