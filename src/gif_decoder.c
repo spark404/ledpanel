@@ -123,8 +123,6 @@ gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame) {
     frame->offset_y = y_offset;
     frame->width = width;
     frame->height = height;
-    frame->color_table = malloc(gif->ct_size * 3);
-    frame->frame = malloc(width * height);
 
     if (frame->frame == NULL) {
         LOG_MSG("Not enough free memory for the frame\n");

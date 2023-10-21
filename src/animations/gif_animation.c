@@ -127,6 +127,9 @@ void gif_animation_update(framebuffer_t *framebuffer) {
     }
 
     frame_t frame;
+    frame.color_table = malloc(1024); // Enoguh to hold a 256 color palette
+    frame.frame = malloc(1024); // Enough to hold 32*16;
+
     gif_error_t res = gif_decoder_read_next_frame(&gif, &frame);
     if (res == GIF_EOF) {
         if (state == PLAYING_LOOP) {
