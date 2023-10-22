@@ -70,11 +70,6 @@ gif_error_t gif_decoder_init(uint8_t *source, size_t size, gif_t *gif) {
         return GIF_ERROR;
     }
 
-    if (descriptor->packed.color_resolution + 1 != 8) {
-        LOG_MSG("%d bits per color is not supported", descriptor->packed.color_resolution + 1);
-        return GIF_ERROR;
-    }
-
     gif->image_start = source;
     gif->image_size = size;
     gif->ct_size = 1 << (descriptor->packed.ct_size + 1);
