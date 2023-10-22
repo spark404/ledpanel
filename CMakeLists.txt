@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.12)
 
 include(pico_sdk_import.cmake)
 include(embedded.cmake)
+include(libraries/i2c_slave/i2c_slave.cmake)
+include(libraries/gif_decoder/gif_decoder.cmake)
 
 include_directories("util")
 
@@ -12,11 +14,8 @@ pico_sdk_init()
 add_executable(ledpanel
         src/main.c
         src/framebuffer.c
-        src/gif_decoder.c
-        src/gif_lzw_decompress.c
         src/animations/plasma.c
         src/animations/gif_animation.c
-        src/i2c_slave.c
 )
 
 add_resource( "images/baloons.gif" )
@@ -34,7 +33,11 @@ add_resource( "images/pnp2000.gif" )
 
 target_include_directories(ledpanel PRIVATE src)
 
-target_link_libraries(ledpanel PRIVATE pico_stdlib pico_unique_id hardware_pio pico_multicore hardware_i2c ${RC_DEPENDS})
+target_link_libraries(ledpanel PRIVATE
+        pico_stdlib pico_unique_id hardware_pio pico_multicore hardware_i2c
+        ${RC_DEPENDS}
+        i2c_slave gif_decoder
+)
 
 pico_add_extra_outputs(ledpanel)
 pico_enable_stdio_uart(ledpanel 1)

@@ -2,8 +2,8 @@
 // Created by Hugo Trippaers on 22/07/2023.
 //
 
-#ifndef LEDPANEL_GIF_DECODER_H
-#define LEDPANEL_GIF_DECODER_H
+#ifndef _GIF_DECODER_H
+#define _GIF_DECODER_H
 
 #define GIF_OK    0
 #define GIF_ERROR 1
@@ -40,4 +40,4 @@ typedef struct {
 gif_error_t gif_decoder_init(uint8_t *source, size_t size, gif_t *gif);
 gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame);
 
-#endif //LEDPANEL_GIF_DECODER_H
+#endif //_GIF_DECODER_H
