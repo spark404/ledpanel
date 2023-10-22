@@ -106,7 +106,7 @@ int framebuffer_sync(framebuffer_t *framebuffer) {
         }
 
         // Trigger the latch
-        latch(framebuffer, y, 1 << (framebuffer->pwm + 1));
+        latch(framebuffer, y, framebuffer->pwm < 7 ? 1 << (framebuffer->pwm + 1) : 1 << (framebuffer->pwm + 2));
     }
 
     // Increase pwm cycle (colordepth steps)
@@ -153,5 +153,7 @@ static void latch(framebuffer_t *framebuffer, int line, int delay) {
     // Set output enable HIGH to turn on the display
     gpio_put(framebuffer->config.pin_oe, 1);
 
+    // This requires access to the low lever timer registers
+    // which is not safe to do on multiple cores.
     busy_wait_us(delay);
 }

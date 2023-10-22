@@ -15,6 +15,9 @@
 #define I2C_1_SCL 15
 #define I2C_1_SDA 14
 
+// Frequency in HZ for the animation update loop
+#define ANIMATION_FREQUENCY 24
+
 framebuffer_t fb;
 framebuffer_config_t framebuffer_config = {
     R0,G0, B0,
@@ -53,7 +56,7 @@ int main(void) {
 
     repeating_timer_t timer;
     alarm_pool_t *alarm_pool = alarm_pool_create_with_unused_hardware_alarm(1);
-    alarm_pool_add_repeating_timer_us(alarm_pool, 60 * (int64_t)1000, timer_callback, NULL, &timer);
+    alarm_pool_add_repeating_timer_us(alarm_pool, 1000000UL / ANIMATION_FREQUENCY, timer_callback, NULL, &timer);
 
     i2c_init(i2c1, I2C_BAUDRATE);
     gpio_init(I2C_1_SCL);
@@ -111,7 +114,7 @@ static void i2c_slave_handler(i2c_inst_t *i2c, i2c_slave_event_t event) {
         }
 
         if (i2c_bytes_received == 2) {
-            if (buffer[1] > 7 || buffer[2] > 3) {
+            if (buffer[1] > 10 || buffer[2] > 3) {
                 // Safety
                 gif_animation_play(1, 3);
                 return;

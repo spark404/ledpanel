@@ -26,6 +26,7 @@ typedef struct {
     uint8_t *frame_ptr;
     uint8_t transparancy_enabled;
     uint8_t transparancy_index;
+    uint16_t delay;
 } gif_t;
 
 typedef struct {
@@ -35,6 +36,7 @@ typedef struct {
     uint8_t *color_table;
     uint8_t transparancy_enabled;
     uint8_t transparancy_index;
+    uint16_t delay;
 } frame_t;
 
 gif_error_t gif_decoder_init(uint8_t *source, size_t size, gif_t *gif);

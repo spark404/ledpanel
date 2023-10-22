@@ -33,6 +33,8 @@ extern uint8_t snafu_gif_start[] asm( "images_snafu_gif_start" );
 extern uint8_t snafu_gif_end[]   asm( "images_snafu_gif_end" );
 extern uint8_t pnp2000_gif_start[] asm( "images_pnp2000_gif_start" );
 extern uint8_t pnp2000_gif_end[] asm( "images_pnp2000_gif_end" );
+extern uint8_t piet_gif_start[] asm( "images_piet_gif_start" );
+extern uint8_t piet_gif_end[] asm( "images_piet_gif_end" );
 
 // Interlaces images
 extern uint8_t snowing_gif_start[] asm( "images_snowing_gif_start" );
@@ -49,6 +51,7 @@ static gif_image_t sequences[] = {
         { snafu_gif_start, snafu_gif_end },
         { pnp2000_gif_start, pnp2000_gif_end },
         { numbers_gif_start, numbers_gif_end },
+        { piet_gif_start, piet_gif_end },
 };
 
 #define DEFAULT_SEQUENCE 0
@@ -61,19 +64,23 @@ typedef enum {
 } git_animation_state_t;
 
 static gif_t gif;
+static frame_t frame;
 static mutex_t gif_mutex;
 static git_animation_state_t state = STOPPED;
 static git_animation_state_t pause_state;
 static uint8_t current_sequence = DEFAULT_SEQUENCE;
+static unsigned long delay_ticks =0;
 
 void gif_animation_init(framebuffer_t *framebuffer) {
+    frame.color_table = malloc(1024); // Enough to hold a 256 color palette
+    frame.frame = malloc(1024); // Enough to hold 32*16;
+
     mutex_init(&gif_mutex);
     gif_decoder_init(sequences[DEFAULT_SEQUENCE].start, sequences[DEFAULT_SEQUENCE].end - sequences[DEFAULT_SEQUENCE].start, &gif);
     state = PLAYING_LOOP;
 }
 
 void gif_animation_play(int sequence_id, int new_state) {
-    printf("Animation Play Sequence %d, State %d\n", sequence_id, new_state);
     mutex_enter_blocking(&gif_mutex);
     current_sequence = sequence_id;
     gif_decoder_init(sequences[current_sequence].start, sequences[current_sequence].end - sequences[current_sequence].start, &gif);
@@ -82,7 +89,6 @@ void gif_animation_play(int sequence_id, int new_state) {
 }
 
 void gif_animation_pause() {
-    printf("Animation Pause, was %d\n", state);
     mutex_enter_blocking(&gif_mutex);
     pause_state = state;
     state = PAUSED;
@@ -92,14 +98,12 @@ void gif_animation_pause() {
 void gif_animation_resume() {
     if (state != PAUSED)
         return;
-    printf("Animation Resume, to %d\n", pause_state);
     mutex_enter_blocking(&gif_mutex);
     state = pause_state;
     mutex_exit(&gif_mutex);
 }
 
 void gif_animation_stop() {
-    printf("Animation Stop\n");
     mutex_enter_blocking(&gif_mutex);
     state = STOPPED;
     mutex_exit(&gif_mutex);
@@ -126,9 +130,12 @@ void gif_animation_update(framebuffer_t *framebuffer) {
         return;
     }
 
-    frame_t frame;
-    frame.color_table = malloc(1024); // Enoguh to hold a 256 color palette
-    frame.frame = malloc(1024); // Enough to hold 32*16;
+    // Crude but effective
+    if (delay_ticks > 0) {
+        delay_ticks--;
+        mutex_exit(&gif_mutex);
+        return;
+    }
 
     gif_error_t res = gif_decoder_read_next_frame(&gif, &frame);
     if (res == GIF_EOF) {
@@ -149,6 +156,19 @@ void gif_animation_update(framebuffer_t *framebuffer) {
         return;
     }
 
+    if (frame.delay != 0) {
+        // Calculate the number of updates we need to skip before the next frame should be shown
+        // frame.delay is in 1/100 of a second, so every tick in delay is 10 ms.
+        // We are called at 24hz (see ANIMATION_FREQUENCY in main.c)
+        // That means a single frame is visible for 41.667 ms
+        // A frame delay below 5 is negligible
+        if (frame.delay > 5) {
+            delay_ticks = (10000UL * frame.delay) / 41667;
+        }
+    } else {
+        delay_ticks = 0;
+    }
+
     uint8_t *frame_ptr = frame.frame;
     for (int y=0; y<frame.height; y++) {
         for (int x=0; x<frame.width; x++) {
@@ -163,9 +183,6 @@ void gif_animation_update(framebuffer_t *framebuffer) {
             framebuffer_drawpixel(framebuffer, x+frame.offset_x, y+frame.offset_y, color);
         }
     }
-    free(frame.frame);
-    frame.frame = NULL;
-    free(frame.color_table);
-    frame.color_table = NULL;
+
     mutex_exit(&gif_mutex);
 }

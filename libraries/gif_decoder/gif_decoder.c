@@ -131,11 +131,14 @@ gif_error_t gif_decoder_read_next_frame(gif_t *gif, frame_t *frame) {
 
     memcpy(frame->color_table, gif->global_ct, gif->ct_size * 3);
 
+    // We get a number of values from the GCE block, copy them over to the frame
     frame->transparancy_enabled = gif->transparancy_enabled;
     if (frame->transparancy_enabled) {
         frame->transparancy_index = gif->transparancy_index;
         LOG_MSG("Transparency enabled, index is %d\n", gif->transparancy_index);
     }
+
+    frame->delay = gif->delay;
 
     res = gif_decoder_read_image_data(++ptr, frame->frame);
     if (res != GIF_OK) {
@@ -250,7 +253,7 @@ static gif_error_t gif_decoder_parse_extension_block(gif_t *gif) {
 
     ptr += 2; // skip block id and fixed size 4
     uint8_t fields = *ptr++;
-    uint16_t delay_time = *ptr | *(ptr+1) << 8;
+    gif->delay =  *ptr | *(ptr+1) << 8;
     ptr += 2;
     uint8_t transparent_idx = *ptr++;
     ptr++; // skip block terminator
