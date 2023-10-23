@@ -7,6 +7,8 @@
 
 #include "framebuffer.h"
 
+#define DEFAULT_GIF_SEQUENCE 0
+
 void plasma_init(framebuffer_t *framebuffer);
 void plasma_update(framebuffer_t *framebuffer);
 

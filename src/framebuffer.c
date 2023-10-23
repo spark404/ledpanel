@@ -106,7 +106,7 @@ int framebuffer_sync(framebuffer_t *framebuffer) {
         }
 
         // Trigger the latch
-        latch(framebuffer, y, framebuffer->pwm < 7 ? 1 << (framebuffer->pwm + 1) : 1 << (framebuffer->pwm + 2));
+        latch(framebuffer, y, 1 << (framebuffer->pwm + 1));
     }
 
     // Increase pwm cycle (colordepth steps)

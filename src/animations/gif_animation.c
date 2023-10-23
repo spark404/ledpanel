@@ -7,6 +7,7 @@
 #include "gif_decoder.h"
 
 #include "framebuffer.h"
+#include "animations.h"
 
 typedef struct {
     uint8_t *start;
@@ -54,8 +55,6 @@ static gif_image_t sequences[] = {
         { piet_gif_start, piet_gif_end },
 };
 
-#define DEFAULT_SEQUENCE 0
-
 typedef enum {
     STOPPED,
     PAUSED,
@@ -68,15 +67,19 @@ static frame_t frame;
 static mutex_t gif_mutex;
 static git_animation_state_t state = STOPPED;
 static git_animation_state_t pause_state;
-static uint8_t current_sequence = DEFAULT_SEQUENCE;
+static uint8_t current_sequence = DEFAULT_GIF_SEQUENCE;
 static unsigned long delay_ticks =0;
+
+inline uint8_t gamma_correct(uint8_t value) {
+    return (value*value)/256;
+}
 
 void gif_animation_init(framebuffer_t *framebuffer) {
     frame.color_table = malloc(1024); // Enough to hold a 256 color palette
     frame.frame = malloc(1024); // Enough to hold 32*16;
 
     mutex_init(&gif_mutex);
-    gif_decoder_init(sequences[DEFAULT_SEQUENCE].start, sequences[DEFAULT_SEQUENCE].end - sequences[DEFAULT_SEQUENCE].start, &gif);
+    gif_decoder_init(sequences[DEFAULT_GIF_SEQUENCE].start, sequences[DEFAULT_GIF_SEQUENCE].end - sequences[DEFAULT_GIF_SEQUENCE].start, &gif);
     state = PLAYING_LOOP;
 }
 
@@ -178,7 +181,7 @@ void gif_animation_update(framebuffer_t *framebuffer) {
             }
 
             uint8_t *color_idx = frame.color_table + pixel * 3;
-            uint32_t color = *color_idx << 16 | *(color_idx+1) << 8 | *(color_idx+2);
+            uint32_t color = gamma_correct(*color_idx) << 16 | gamma_correct(*(color_idx+1)) << 8 | gamma_correct(*(color_idx+2));
 
             framebuffer_drawpixel(framebuffer, x+frame.offset_x, y+frame.offset_y, color);
         }

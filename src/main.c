@@ -77,7 +77,7 @@ int main(void) {
         if (time_us_64() - last_i2c_transmission > 10 * 1000 * 1000) {
             if (!i2c_timeout) {
                 i2c_timeout = 1;
-                gif_animation_play(0, 3);
+                gif_animation_play(DEFAULT_GIF_SEQUENCE, 3);
             }
         }
         else {
