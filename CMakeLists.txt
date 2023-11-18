@@ -30,6 +30,7 @@ add_resource( "images/snafu.gif" )
 add_resource( "images/snowing.gif" )
 add_resource( "images/pnp2000.gif" )
 add_resource( "images/piet.gif" )
+add_resource( "images/loopband.gif" )
 
 
 target_include_directories(ledpanel PRIVATE src)

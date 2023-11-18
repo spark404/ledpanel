@@ -36,6 +36,8 @@ extern uint8_t pnp2000_gif_start[] asm( "images_pnp2000_gif_start" );
 extern uint8_t pnp2000_gif_end[] asm( "images_pnp2000_gif_end" );
 extern uint8_t piet_gif_start[] asm( "images_piet_gif_start" );
 extern uint8_t piet_gif_end[] asm( "images_piet_gif_end" );
+extern uint8_t loopband_gif_start[] asm( "images_loopband_gif_start" );
+extern uint8_t loopband_gif_end[] asm( "images_loopband_gif_end" );
 
 // Interlaces images
 extern uint8_t snowing_gif_start[] asm( "images_snowing_gif_start" );
@@ -53,6 +55,7 @@ static gif_image_t sequences[] = {
         { pnp2000_gif_start, pnp2000_gif_end },
         { numbers_gif_start, numbers_gif_end },
         { piet_gif_start, piet_gif_end },
+        { loopband_gif_start, loopband_gif_end },
 };
 
 typedef enum {
