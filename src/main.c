@@ -114,7 +114,7 @@ static void i2c_slave_handler(i2c_inst_t *i2c, i2c_slave_event_t event) {
         }
 
         if (i2c_bytes_received == 2) {
-            if (buffer[1] > 10 || buffer[2] > 3) {
+            if (buffer[1] > 11 || buffer[2] > 3) {
                 // Safety
                 gif_animation_play(1, 3);
                 return;
